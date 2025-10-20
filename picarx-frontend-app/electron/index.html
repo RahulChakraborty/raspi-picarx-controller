@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>CS498: IoT — Lab 2</title>
+    <link rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" />
+    <style>
+      :root { --pad:16px; }
+      body { padding:16px; background:#f6f8fb; font-family: "Helvetica Neue", Arial, sans-serif; }
+      h3 { margin-bottom:20px; font-weight:600; }
+      .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:16px; }
+      .tile {
+        grid-column: span 6; background:#fff; border-radius:12px;
+        border:1px solid #e6e8ef; box-shadow:0 1px 2px rgba(16,24,40,.05);
+      }
+      .tile-header { padding:14px var(--pad); border-bottom:1px solid #eef0f5; font-weight:600; }
+      .tile-body { padding:var(--pad); }
+      @media(max-width:900px){.tile{grid-column:span 12;}}
+      .btn-row { display:flex; flex-wrap:wrap; gap:8px; }
+      .status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:#c62828;}
+      .status-dot.ok{background:#2e7d32;}
+      .kv{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #eef0f5;}
+      .kv .k{color:#6b7280;} .kv .v{font-weight:600;}
+      .pill{border-radius:999px;padding:2px 8px;background:#eef2ff;color:#3730a3;}
+      .log{background:#0b1020;color:#b7ffb7;min-height:160px;max-height:300px;overflow:auto;padding:10px;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;}
+      .cam{width:100%;max-height:420px;object-fit:cover;border-radius:8px;border:1px solid #e6e8ef;}
+      .pad-keys{display:flex;flex-direction:column;align-items:center;margin-top:12px;}
+      .arrow{font-size:46px;color:grey;padding:6px;cursor:pointer;user-select:none;touch-action:none;}
+      .arrow.pressed{color:green;}
+      .form-inline .form-control { width:auto; display:inline-block; }
+    </style>
+    <script src="./index.js" defer></script>
+  </head>
+
+  <body>
+    <h3>CS498: IoT — Lab 2 Dashboard</h3>
+    <div class="grid">
+      <!-- Tile 1: Live Camera -->
+      <section class="tile">
+        <div class="tile-header">Live Camera</div>
+        <div class="tile-body text-center">
+          <img id="cam" class="cam" src="./media/default_background.png" alt="PiCam stream"/>
+          <div class="text-muted" style="margin-top:8px;font-size:12px;">
+            MJPEG expected at <code>/stream</code> — URL auto-derived from Server IP/Port: <code id="camUrlText">—</code>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tile 2: Connection + Controls -->
+      <section class="tile">
+        <div class="tile-header">Connection & Controls</div>
+        <div class="tile-body">
+          <!-- IP/Port editor -->
+          <div class="form-inline" style="margin-bottom:10px;">
+            <label>Server&nbsp;IP:&nbsp;</label>
+            <input id="cfgIp"  class="form-control" placeholder="10.129.x.y" />
+            <label style="margin-left:8px;">Port:&nbsp;</label>
+            <input id="cfgPort" class="form-control" placeholder="65432" />
+            <button class="btn btn-default" style="margin-left:8px;" onclick="saveApplyConfig()">Save & Reconnect</button>
+          </div>
+
+          <div class="btn-row" style="justify-content:flex-start;margin-bottom:12px;">
+            <button class="btn btn-success" onclick="connect()">Connect</button>
+            <button class="btn btn-danger"  onclick="disconnect()">Disconnect</button>
+            <input id="message" class="form-control" placeholder="manual cmd (e.g., forward)" />
+            <button class="btn btn-primary" onclick="sendOnce()">Send</button>
+          </div>
+
+          <div style="margin:8px 0;">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">disconnected</span>
+          </div>
+
+          <!-- Arrow pad -->
+          <div class="pad-keys text-center">
+            <span id="upArrow" class="arrow" role="button">&#8679;</span>
+            <div>
+              <span id="leftArrow" class="arrow" role="button">&#8678;</span>
+              <span style="display:inline-block;width:60px"></span>
+              <span id="rightArrow" class="arrow" role="button">&#8680;</span>
+            </div>
+            <span id="downArrow" class="arrow" role="button">&#8681;</span>
+            <p class="text-muted" style="font-size:12px;margin-top:6px;">Use arrows or W/A/S/D</p>
+          </div>
+
+          <div class="kv"><span class="k">Active Server</span><span class="v"><code id="srvAddr">—</code> : <code id="srvPort">—</code></span></div>
+          <div class="kv"><span class="k">Last TX</span><span class="v" id="lastTx">—</span></div>
+          <div class="kv"><span class="k">Last RX</span><span class="v" id="lastRx">—</span></div>
+        </div>
+      </section>
+
+      <!-- Tile 3: Telemetry -->
+      <section class="tile">
+        <div class="tile-header">Live Telemetry</div>
+        <div class="tile-body">
+          <div class="kv"><span class="k">Direction</span><span class="v"><span id="direction" class="pill">—</span></span></div>
+          <div class="kv"><span class="k">Moving</span><span class="v" id="moving">—</span></div>
+          <div class="kv"><span class="k">Steer</span><span class="v" id="steer">—</span></div>
+          <div class="kv"><span class="k">Speed (m/s)</span><span class="v" id="speed">0.0</span></div>
+          <div class="kv"><span class="k">Distance (m)</span><span class="v" id="distance">0.0</span></div>
+          <div class="kv"><span class="k">CPU Temp (°C)</span><span class="v" id="temperature">—</span></div>
+          <div class="kv"><span class="k">Timestamp</span><span class="v" id="ts">—</span></div>
+        </div>
+      </section>
+
+      <!-- Tile 4: Logs -->
+      <section class="tile">
+        <div class="tile-header">Live Logs</div>
+        <div class="tile-body">
+          <div class="log" id="rxlog"></div>
+          <div class="text-muted" style="margin-top:6px;font-size:12px;">Last line:</div>
+          <pre id="api-response" class="log" style="min-height:40px;max-height:100px;"></pre>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
