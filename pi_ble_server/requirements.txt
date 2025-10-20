@@ -1,0 +1,4 @@
+bluezero
+flask
+opencv-python
+numpy
